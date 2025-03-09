@@ -1,77 +1,104 @@
 import os
 import pandas as pd
+import logging
+import itertools
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from src.models import Department, Job, HiredEmployee
+from sqlalchemy.dialects.postgresql import insert
 from dotenv import load_dotenv
+from src.models import Department, Job, HiredEmployee
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-DB_HOST = os.getenv("DB_HOST", "db")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "testdb")
-DB_USER = os.getenv("DB_USER", "admin")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "secret")
+class DatabaseCredentials:
+    """Handles database credentials using environment variables."""
+    def __init__(self):
+        self.host = os.getenv("DB_HOST", "db")
+        self.port = os.getenv("DB_PORT", "5432")
+        self.name = os.getenv("DB_NAME", "testdb")
+        self.user = os.getenv("DB_USER", "admin")
+        self.password = os.getenv("DB_PASSWORD", "secret")
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    def get_database_url(self):
+        """Returns the database connection URL."""
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+class DatabaseConnection:
+    """Manages database connection using SQLAlchemy."""
+    def __init__(self, credentials: DatabaseCredentials):
+        self.engine = create_engine(credentials.get_database_url(), echo=False)
+        self.SessionLocal = sessionmaker(bind=self.engine)
 
-from src.models import Department, Job, HiredEmployee
+    def get_session(self):
+        """Returns a new database session."""
+        return self.SessionLocal()
 
-def load_departments(session, csv_path):
-    df = pd.read_csv(csv_path, names=["id", "department"], header=None)
-    for _, row in df.iterrows():
-        dept = Department(id=int(row["id"]), name=row["department"])
-        session.merge(dept)
-    session.commit()
+class DataLoader:
+    """Loads data into the database in batches."""
+    def __init__(self, db_conn: DatabaseConnection):
+        self.db_conn = db_conn
 
-def load_jobs(session, csv_path):
-    df = pd.read_csv(csv_path, names=["id", "job"], header=None)
-    for _, row in df.iterrows():
-        job = Job(id=row["id"], name=row["job"])
-        session.merge(job)
-    session.commit()
+    def _load_data(self, csv_path, column_names, table, batch_size=1000):
+        """
+        Loads CSV data into the database in batches, avoiding duplicates.
 
-def load_employees(session, csv_path):
-    df = pd.read_csv(csv_path, names=["id", "name", "datetime", "department_id", "job_id"], header=None)
-    df = df.where(pd.notnull(df), None) 
+        Parameters:
+        - csv_path: Path to the CSV file.
+        - column_names: List of column names (since CSV files have no headers).
+        - table: Target database table.
+        - batch_size: Number of rows per batch (default: 1000).
+        """
 
-    df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
-    df.dropna(subset=["id", "name", "datetime", "department_id", "job_id"], inplace=True)
+        df = pd.read_csv(csv_path, names=column_names, header=None)
 
-    for _, row in df.iterrows():
-        if pd.isna(row['datetime']):
-            continue
+        # Replace NaN values with None
+        df = df.where(pd.notnull(df), None)
 
-        employee = HiredEmployee(
-            id=row["id"], 
-            name=row["name"],
-            datetime=pd.to_datetime(row["datetime"]),
-            department_id=int(row["department_id"]) if pd.notnull(row["department_id"]) else None, 
-            job_id=int(row["job_id"]) if pd.notnull(row["job_id"]) else None
-        )
-        session.merge(employee)
-    session.commit()
+        # Convert datetime if applicable
+        if "datetime" in column_names:
+            df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
 
+        # Drop rows with missing required fields
+        df.dropna(subset=column_names, inplace=True)
 
-if __name__ == "__main__":
-    import pandas as pd
+        # Convert DataFrame to a list of dictionaries (records)
+        data = df.to_dict(orient="records")
 
-    session = SessionLocal()
+        # Insert data in batches
+        with self.db_conn.engine.begin() as conn:
+            batch_iterator = iter(data)
+            while batch := list(itertools.islice(batch_iterator, batch_size)):  
+                # Using `itertools.islice()` instead of a `for` loop improves memory efficiency 
+                # This prevents excessive memory usage when handling large datasets.
+                stmt = insert(table.__table__).values(batch).on_conflict_do_nothing(index_elements=["id"])
+                conn.execute(stmt)
+
+                # Log when exactly 1000 rows are inserted
+                if len(batch) == batch_size:
+                    logging.info(f"{batch_size} rows inserted into {table.__tablename__}")
+
+        logging.info(f"{table.__tablename__.capitalize()} loaded successfully!")
+
+def main():
+    """Main function to load data from CSV files into the database."""
+
+    credentials = DatabaseCredentials()
+    db_connection = DatabaseConnection(credentials)
+    loader = DataLoader(db_connection)
+
+    # Define expected columns since CSV files have no headers
+    columns_departments = ["id", "name"]
+    columns_jobs = ["id", "name"]
+    columns_employees = ["id", "name", "datetime", "department_id", "job_id"]
 
     try:
-        load_departments(session, "data/departments.csv")
-        print("Departments loaded successfully!")
-
-        load_jobs(session, "data/jobs.csv")
-        print("Jobs loaded successfully!")
-
-        load_employees(session, "data/hired_employees.csv")
-        print("Hired employees loaded successfully!")
+        loader._load_data("data/departments.csv", columns_departments, Department)
+        loader._load_data("data/jobs.csv", columns_jobs, Job)
+        loader._load_data("data/hired_employees.csv", columns_employees, HiredEmployee)
 
     except Exception as e:
-        print("Error loading CSV data:", e)
-    finally:
-        session.close()
+        logging.error(f"Error loading CSV data: {e}")
+
+if __name__ == "__main__":
+    main()

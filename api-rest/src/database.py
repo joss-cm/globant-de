@@ -1,25 +1,42 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-import os
 
-DB_HOST = os.getenv("DB_HOST", "db")
-DB_PORT = os.getenv("DB_PORT", 5432)
-DB_NAME = os.getenv("DB_NAME", "testdb")
-DB_USER = os.getenv("DB_USER", "admin")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "secret")
+class DatabaseConfig:
+    """Encapsulates database configuration and URL construction."""
+    
+    def __init__(self):
+        self.host = os.getenv("DB_HOST", "db")
+        self.port = os.getenv("DB_PORT", "5432")
+        self.name = os.getenv("DB_NAME", "testdb")
+        self.user = os.getenv("DB_USER", "admin")
+        self.password = os.getenv("DB_PASSWORD", "secret")
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    def get_database_url(self):
+        """Constructs and returns the PostgreSQL connection URL."""
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
-engine = create_engine(DATABASE_URL, echo=True)
+# Initialize database configuration
+db_config = DatabaseConfig()
+DATABASE_URL = db_config.get_database_url()
 
+# Create the database engine
+engine = create_engine(DATABASE_URL, echo=True, pool_pre_ping=True)
+
+# Session factory
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
+# Base class for ORM models
 Base = declarative_base()
 
-# Dependency para FastAPI
+# Dependency for FastAPI
 def get_db():
+    """Provides a new database session with error handling."""
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        db.rollback()  # Rollback changes in case of error
+        raise e
     finally:
         db.close()
