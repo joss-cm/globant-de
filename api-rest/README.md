@@ -8,7 +8,7 @@ This project provides a REST API built with FastAPI and PostgreSQL to handle CSV
 
 ## Prerequisites
 
-### 🔹 Install Dependencies (MacOS)
+### 1. Install Dependencies (MacOS)
 1. **Install Docker** (Version `4.37` recommended to avoid malware warnings):
    ```bash
    brew install --cask docker
@@ -23,9 +23,9 @@ This project provides a REST API built with FastAPI and PostgreSQL to handle CSV
    cd your-repo-name
    ```
 
-## 🐳 Setting up Docker & PostgreSQL
+## 2. Setting up Docker & PostgreSQL
 
-### 🔹 Pull and Run PostgreSQL
+### - Pull and Run PostgreSQL
 1. **Pull the PostgreSQL image**:
    ```bash
    docker pull postgres:15
@@ -60,7 +60,7 @@ Jobs loaded successfully!
 Hired employees loaded successfully!
 ```
 
-## 🔍 Debugging & Useful Commands
+## Debugging & Useful Commands
 
 - **Check running containers**:
   ```bash
@@ -79,7 +79,7 @@ Hired employees loaded successfully!
   docker compose down -v
   ```
 
-## 📡 API Testing
+## API Testing
 
 Once the API is running, test the connection:
 ```bash
@@ -90,16 +90,13 @@ Expected Response:
 {"message":"API is running!"}
 ```
 
-## 📌 Contribution
+## Contribution
 1. Fork the repository.
 2. Create a feature branch: `git checkout -b feature-branch`
 3. Commit changes: `git commit -m "Description"`
 4. Push changes: `git push origin feature-branch`
 5. Submit a pull request.
 
-## 📜 License
-This project is licensed under the MIT License.
-
 ---
 
-💡 **Tip:** If you encounter issues, restart Docker and verify `.env` variables are correctly set! 🚀
+💡 **Tip:** If you encounter issues, restart Docker and verify `.env` variables are correctly set!
