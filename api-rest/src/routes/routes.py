@@ -1,46 +1,50 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
+import pandas as pd
 from src.database import get_db
 from src.models import Department, Job, HiredEmployee
-from src.utils import read_csv_file, validate_csv_columns
 
 router = APIRouter()
 
 @router.post("/upload/{table_name}")
-def upload_csv(table_name: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    try:
-        df = read_csv_file(file)
-        
-        if table_name == "departments":
-            validate_csv_columns(df, ["id", "name"])
-            db.bulk_save_objects([Department(**row) for row in df.to_dict(orient="records")])
+async def upload_csv(table_name: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    df = pd.read_csv(file.file)
+    
+    if table_name == "departments":
+        required_columns = ["id", "name"]
+        validate_csv_columns(df, required_columns)
 
-        elif table_name == "jobs":
-            df.columns = df.columns.str.strip()
-            validate_csv_columns(df, ["id", "name"])
-            for _, row in df.iterrows():
-                db.add(Job(id=row["id"], name=row["name"]))
+        departments = [Department(id=row["id"], name=row["name"]) for _, row in df.iterrows()]
+        db.bulk_save_objects(departments)
 
-        elif table_name == "hired_employees":
-            df.columns = df.columns.str.lower()
-            validate_csv_columns(df, ["id", "name", "datetime", "department_id", "job_id"])
-            for _, row in df.iterrows():
-                db.add(HiredEmployee(
-                    id=row["id"],
-                    name=row["name"],
-                    datetime=row["datetime"],
-                    department_id=row["department_id"],
-                    job_id=row["job_id"]
-                ))
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown table name: {table_name}")
+    elif table_name == "jobs":
+        required_columns = ["id", "name"]
+        validate_csv_columns(df, required_columns)
 
-        db.commit()
-        return {"message": f"Data successfully loaded into {table_name}"}
+        jobs = [Job(id=row["id"], name=row["name"]) for _, row in df.iterrows()]
+        db.bulk_save_objects(jobs)
 
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    elif table_name == "hired_employees":
+        required_columns = ["id", "name", "datetime", "department_id", "job_id"]
+        validate_csv_columns(df, required_columns)
+
+        employees = [
+            HiredEmployee(
+                id=row["id"],
+                name=row["name"],
+                datetime=row["datetime"],
+                department_id=row["department_id"],
+                job_id=row["job_id"]
+            ) for _, row in df.iterrows()
+        ]
+        db.bulk_save_objects(employees)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid table name")
+
+    db.commit()
+    return {"message": f"CSV uploaded successfully to {table_name}"}
+
+def validate_csv_columns(df, required_columns):
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise HTTPException(status_code=400, detail=f"Missing required columns: {missing_columns}")

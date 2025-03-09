@@ -4,6 +4,10 @@ FROM python:3.10
 # Configura el directorio de trabajo
 WORKDIR /app
 
+# Instala dependencias primero para aprovechar caché
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
 # Copia los archivos al contenedor
 COPY . /app
 
