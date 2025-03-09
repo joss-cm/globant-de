@@ -61,7 +61,7 @@ This project provides a REST API built with FastAPI and PostgreSQL to handle CSV
    docker exec -it api_service python -m scripts.load_csv
    ```
 4. **Support Image:**  
-   ![CSV Data Load Result](img/first_question.png)
+   ![CSV Data Load Result](img/1-question.png)
 
 ---
 
@@ -131,7 +131,20 @@ curl http://localhost:8000/ping
 ```
 
 #### **Support Image:**  
-   ![Docker and API Usage](img/3_question.png)
+   ![Docker and API Usage](img/3-question.png)
+
+---
+
+## **Bonus Track v2: Azure Architecture y Recommendations**
+Recommendations:
+1.	The query in Question 2 could be integrated into the API to return responses in JSON format, enabling real-time data retrieval via REST endpoints.
+2.	Further automation of the Docker image can be achieved by leveraging cloud-native services such as Azure Container Apps or Azure Kubernetes Service (AKS).
+ 
+Azure Cloud Architecture Proposal:
+The diagram below represents a recommended Azure architecture to deploy this solution in the cloud.
+(Currently, the deployment in Azure has not been performed, as I have no credits in my personal account.)
+
+   ![Azure-Architecture](img/arq.png)
 
 ---
 
